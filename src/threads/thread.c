@@ -479,8 +479,6 @@ init_thread (struct thread *t, const char *name, int priority)
   t->fd_count = 2;
   #ifdef USERPROG
   spt_init(&t->spt);
-  list_init(&t->mmap_list);
-  t->mapid = 0;
   #endif
 
   old_level = intr_disable ();

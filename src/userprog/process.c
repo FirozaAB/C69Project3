@@ -19,6 +19,8 @@
 #include "threads/vaddr.h"
 #ifdef VM
 #include "vm/page.h"
+#include "vm/frame.h"
+#include "vm/swap.h"
 #endif
 
 static thread_func start_process NO_RETURN;
@@ -239,7 +241,7 @@ struct Elf32_Phdr
 #define PF_W 2          /* Writable. */
 #define PF_R 4          /* Readable. */
 
-static bool setup_stack (void **esp, void *file_name_);
+static bool setup_stack (void **esp, const void *file_name_);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
@@ -348,7 +350,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
     }
 
   /* Set up stack. */
-  if (!setup_stack (esp))
+  if (!setup_stack (esp, file_name))
     goto done;
 
   /* Start address. */
@@ -476,7 +478,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
-setup_stack (void **esp, void *file_name_) 
+setup_stack (void **esp, const void *file_name_) 
 {
   uint8_t *kpage;
   bool success = false;
@@ -507,7 +509,7 @@ setup_stack (void **esp, void *file_name_)
         }
         // push argv[argc-1] to argv[0] (strings)
         int i;
-        int *argv_addr[MAX_ARGS];
+        char *argv_addr[MAX_ARGS];
         for (i = argc - 1; i >= 0; i--) {
           esp_val -= strlen(argv[i]) + 1;
           memcpy((void *)esp_val, argv[i], strlen(argv[i]) + 1);

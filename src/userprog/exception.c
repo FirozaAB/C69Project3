@@ -1,12 +1,17 @@
 #include "userprog/exception.h"
 #include <inttypes.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "userprog/process.h"
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "userprog/pagedir.h"
 #ifdef VM
 #include "vm/page.h"
 #include "vm/frame.h"
+#include "vm/swap.h"
 #include "threads/vaddr.h" 
 #endif
 
@@ -177,7 +182,7 @@ page_fault (struct intr_frame *f)
       new_spte->uvpage = pg_round_down(fault_addr);
       new_spte->write_protected = false;
       new_spte->file = NULL;
-      new_spte->swap_slot = -1;
+      new_spte->swap_index = -1;
       new_spte->type = ZERO;
       new_spte->offset = 0;
       new_spte->read_bytes = 0;
@@ -209,7 +214,7 @@ page_fault (struct intr_frame *f)
       memset(frame + spte->read_bytes, 0, spte->zero_bytes);
       break;
     case SWAP:
-      swap_in(spte->swap_slot, frame);
+      swap_in(spte->swap_index, frame);
       break;
     case ZERO:
       memset(frame, 0, PGSIZE);

@@ -6,6 +6,14 @@
 #include "devices/shutdown.h"
 #include "userprog/process.h"
 #include "lib/stdio.h" 
+#include "filesys/filesys.h"
+#include "filesys/file.h"
+#include "threads/vaddr.h"
+#include "devices/input.h"
+#include "threads/malloc.h"
+#include "threads/synch.h"
+#include "userprog/pagedir.h"
+
 
 static void syscall_handler (struct intr_frame *);
 

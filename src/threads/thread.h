@@ -5,6 +5,11 @@
 #include <list.h>
 #include <stdint.h>
 #include "lib/kernel/hash.h"
+#include "threads/synch.h"
+#include "filesys/file.h"
+#ifdef VM
+#include "vm/page.h"
+#endif
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -116,8 +121,6 @@ struct thread
     /* Used by vm modules */
     struct hash spt;                  /* Supplemental page table. */
     void *esp_copy;                   /* Copy of the user stack pointer. */
-    struct list mmap_list;            /* List of memory mapped files. */
-    mapid_t mapid;                    /* Mapid for memory mapped files. */
    
 
 #endif
