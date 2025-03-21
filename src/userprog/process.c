@@ -1,3 +1,8 @@
+#ifdef VM
+#include "vm/page.h"
+#include "vm/frame.h"
+#include "vm/swap.h"
+#endif
 #include "userprog/process.h"
 #include <debug.h>
 #include <inttypes.h>
@@ -17,23 +22,22 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
-#ifdef VM
-#include "vm/page.h"
-#include "vm/frame.h"
-#include "vm/swap.h"
-#endif
+#include "threads/malloc.h"
+
 
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static bool tokenise(const char *cmdline, char **argv, int *argc);
 
-static bool tokenize(char *cmdline, char **argv, int *argc) {
-  if (cmdline == NULL || argv == NULL || argc == NULL)
+static bool tokenise(const char *cmdline, char **argv, int *argc) {
+  if (cmdline == NULL || argv == NULL || argc == NULL){
     return false;
+  }
 
   char *token, *context;
   int i = 0;
   
-  for (token = strtok_r(cmdline, " ", &context); token != NULL; token = strtok_r(NULL, " ", &context)) 
+  for (token = strtok_r((char *)cmdline, " ", &context); token != NULL; token = strtok_r(NULL, " ", &context)) 
   {
     if (i >= MAX_ARGS){
       return false;
@@ -44,6 +48,27 @@ static bool tokenize(char *cmdline, char **argv, int *argc) {
   return (i > 0);
 }
 
+// returns pointer to file correspopnding to fd
+struct file *get_file(int fd) {
+  struct thread *cur = thread_current();
+  struct list *fds = &cur->fds;
+  struct list_elem *e;
+  // Iterate through file descriptors to find file
+  for (e = list_begin(fds); e != list_end(fds); e = list_next(e)) {
+    struct file_descriptor *fd_entry = list_entry(e, struct file_descriptor, elem);
+    if (fd_entry->fd == fd) {
+      return fd_entry->file;
+    }
+  }
+  // Not found, iterate through memory mapped files
+  for (e = list_begin(&cur->memmapped_files); e != list_end(&cur->memmapped_files); e = list_next(e)) {
+    struct memmapped_file *mmf = list_entry(e, struct memmapped_file, elem);
+    if (mmf->mapid == fd) {
+      return mmf->file;
+    }
+  }
+  return NULL;
+}
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -65,7 +90,7 @@ process_execute (const char *file_name)
   /* Extract args */
   char *argv[MAX_ARGS];
   int argc;
-  if (!tokenize(fn_copy, argv, &argc)){
+  if (!tokenise(fn_copy, argv, &argc)){
     // Malformed input, free page and return TID_ERROR
     palloc_free_page(fn_copy);
     return TID_ERROR;
@@ -160,6 +185,8 @@ process_exit (void)
   #ifdef VM
   spt_destroy(&cur->spt);
   #endif
+  /* Destroy maps */
+  // handled in syscall_exit
 }
 
 /* Sets up the CPU for running user code in the current
@@ -434,7 +461,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
   ASSERT (pg_ofs (upage) == 0);
   ASSERT (ofs % PGSIZE == 0);
-
+  #ifdef VM
   file_seek (file, ofs);
   while (read_bytes > 0 || zero_bytes > 0) 
     {
@@ -458,6 +485,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       spte->zero_bytes = page_zero_bytes;
       spte->type = FILE_BACKED;
       spte->swap_index = (size_t)-1;
+      spte->owner = thread_current();
 
       // insert entry into user thread's SPT
       bool succ = spt_insert(&thread_current()->spt, spte);
@@ -472,6 +500,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       upage += PGSIZE;
       ofs += page_read_bytes;
     }
+  #endif
   return true;
 }
 
@@ -502,7 +531,15 @@ setup_stack (void **esp, const void *file_name_)
         // Get argv and argc
         char *argv[MAX_ARGS];
         int argc;
-        if (!tokenize(file_name_, argv, &argc)) {
+        // Make copy of file_name_
+        char *fn_copy = malloc(strlen(file_name_) + 1);
+        if (fn_copy == NULL) {
+          // free page and return false
+          palloc_free_page(kpage);
+          return false;
+        }
+        strlcpy(fn_copy, file_name_, strlen(file_name_) + 1);
+        if (!tokenise(fn_copy, argv, &argc)) {
           // free page and return false
           palloc_free_page(kpage);
           return false;

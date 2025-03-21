@@ -7,12 +7,13 @@
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/malloc.h"
 #include "userprog/pagedir.h"
+#include "threads/vaddr.h" 
 #ifdef VM
 #include "vm/page.h"
 #include "vm/frame.h"
 #include "vm/swap.h"
-#include "threads/vaddr.h" 
 #endif
 
 /* Number of page faults processed. */
@@ -133,7 +134,6 @@ static void
 page_fault (struct intr_frame *f) 
 {
   bool not_present;  /* True: not-present page, false: writing r/o page. */
-  bool write;        /* True: access was write, false: access was read. */
   bool user;         /* True: access by user, false: access by kernel. */
   void *fault_addr;  /* Fault address. */
 
@@ -148,7 +148,6 @@ page_fault (struct intr_frame *f)
   intr_enable ();
   page_fault_cnt++;
   not_present = (f->error_code & PF_P) == 0;
-  write = (f->error_code & PF_W) != 0;
   user = (f->error_code & PF_U) != 0;
 
 
@@ -187,12 +186,14 @@ page_fault (struct intr_frame *f)
       new_spte->offset = 0;
       new_spte->read_bytes = 0;
       new_spte->zero_bytes = PGSIZE;
+      new_spte->owner = thread_current();
       bool succ = spt_insert(&thread_current()->spt, new_spte);
       if (!succ) {
         free(new_spte);
         kill(f);
         return;
       }
+      spte = new_spte;
     } else { // invalid access, terminate thread
       kill(f);
       return;
@@ -205,13 +206,25 @@ page_fault (struct intr_frame *f)
   }
   switch(spte->type) {
     case FILE_BACKED:
-      file_seek(spte->file, spte->offset);
-      if (file_read(spte->file, frame, spte->read_bytes) != (int) spte->read_bytes) {
-        ft_free(frame);
+      if(spte->file == NULL) {
         kill(f);
         return;
       }
-      memset(frame + spte->read_bytes, 0, spte->zero_bytes);
+      if (!spte->mapped) { // standard file
+        file_seek(spte->file, spte->offset);
+        if (file_read(spte->file, frame, spte->read_bytes) != (int) spte->read_bytes) {
+          ft_free(frame);
+          kill(f);
+          return;
+        }
+      } else { // memory mapped file
+        if (file_read_at(spte->file, frame, spte->read_bytes, spte->offset) != (int) spte->read_bytes) {
+          ft_free(frame);
+          kill(f);
+          return;
+        }
+      }
+      memset(frame + spte->read_bytes, 0, spte->zero_bytes); // zero out remaining bytes
       break;
     case SWAP:
       swap_in(spte->swap_index, frame);
@@ -231,9 +244,10 @@ page_fault (struct intr_frame *f)
     return;
   }
   // unpin the frame
-   struct frame_entry *entry = ft_retrieve(frame);
-   entry->evictable = true;
-
+  ft_unpin(frame);
+  #else
+  bool write;        /* True: access was write, false: access was read. */
+  write = (f->error_code & PF_W) != 0;
   printf ("Page fault at %p: %s error %s page in %s context.\n",
           fault_addr,
           not_present ? "not present" : "rights violation",

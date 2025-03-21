@@ -1,4 +1,5 @@
 #ifdef VM
+#warning "Compiling vm module: swap.c"
 #include "vm/swap.h"
 #include "threads/vaddr.h"
 #include "devices/block.h"
@@ -20,7 +21,6 @@ void swap_init(void)
     lock_init(&swap_lock);
     swap_block = block_get_role(BLOCK_SWAP);
     if (!swap_block) {
-        lock_destroy(&swap_lock);
         PANIC("swap not available\n");
         return; 
     }

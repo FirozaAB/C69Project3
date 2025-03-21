@@ -1,7 +1,8 @@
 #ifdef VM
 #include "vm/page.h"
 #include "threads/malloc.h"
-#include "threads/thread.h"
+#include "threads/vaddr.h"
+
 
 /* hashes spt_entry based on VPN. */
 static unsigned spt_hash(const struct hash_elem *e, void *aux UNUSED) {
@@ -26,6 +27,10 @@ void spt_init(struct hash *spt) {
 bool spt_insert(struct hash *spt, struct spt_entry *entry) {
   entry->uvpage = pg_round_down(entry->uvpage);
   return hash_insert(spt, &entry->spt_elem) == NULL;
+}
+
+void spt_remove(struct hash *spt, struct spt_entry *entry) {
+  hash_delete(spt, &entry->spt_elem);
 }
 
 /* Retrieve spt_entry corresponding to uvpage from spt . */

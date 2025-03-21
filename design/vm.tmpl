@@ -41,7 +41,7 @@ struct frame_entry {
     void *frame;                /* kernal vaddr for frame */
     void *page;                /* page-aligned user vaddr for linked page */
     struct thread *owner;       /* current owner of this frame */
-    bool evictable;             /* If false, this frame cannot be swapped out */
+    bool pin_status;             /* If false, this frame cannot be swapped out */
     struct list_elem elem;      /* List element for global frame table. */
 };
 
@@ -223,14 +223,34 @@ using fewer locks actually increases risk of deadlock
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
+struct memmapped_file {
+  int mapid; // mapid
+  struct file *file; // mapped file
+  void *addr; // start address
+  off_t length; // length of mapped file
+  struct list_elem elem; // list element
+};
+
+This is the struct for storing file mapping information, belongs inside a list beloning to a thread
+
+New thread fields;
+    struct list memmapped_files;      /* List of memory mapped files. */
+    int curr_map;                     /* Current mapid */
+
+Used for accessing the thread's memmapped_files and assigning an ID to new maps
+
 ---- ALGORITHMS ----
 
 >> C2: Describe how memory mapped files integrate into your virtual
 >> memory subsystem.  Explain how the page fault and eviction
 >> processes differ between swap pages and other pages.
 
+1) Dirty memmmaped pages can only be written back to original file, using start and end information 
+from spte.
+
 >> C3: Explain how you determine whether a new file mapping overlaps
 >> any existing segment.
+
 
 ---- RATIONALE ----
 
@@ -240,6 +260,12 @@ using fewer locks actually increases risk of deadlock
 >> that much of their implementation can be shared.  Explain why your
 >> implementation either does or does not share much of the code for
 >> the two situations.
+
+1) I use lazy loading for both demand-paging and mmap.
+2) Both require a page_fault execution to load data into the address space
+3) Diversion: spte->mapped field is used to handle read and write logic for memmmaped files
+   
+
 
                SURVEY QUESTIONS
                ================

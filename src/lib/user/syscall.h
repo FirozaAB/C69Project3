@@ -1,6 +1,8 @@
 #ifndef __LIB_USER_SYSCALL_H
 #define __LIB_USER_SYSCALL_H
 
+typedef int mapid_t;
+
 #include <stdbool.h>
 #include <debug.h>
 
@@ -9,7 +11,7 @@ typedef int pid_t;
 #define PID_ERROR ((pid_t) -1)
 
 /* Map region identifier. */
-typedef int mapid_t;
+typedef _t;
 #define MAP_FAILED ((mapid_t) -1)
 
 /* Maximum characters in a filename written by readdir(). */

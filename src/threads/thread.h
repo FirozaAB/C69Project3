@@ -121,8 +121,8 @@ struct thread
     /* Used by vm modules */
     struct hash spt;                  /* Supplemental page table. */
     void *esp_copy;                   /* Copy of the user stack pointer. */
-   
-
+    struct list memmapped_files;      /* List of memory mapped files. */
+    int curr_map;                     /* Current mapid */
 #endif
 
     /* Owned by thread.c. */
