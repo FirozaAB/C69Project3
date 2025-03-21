@@ -145,6 +145,9 @@ static tid_t syscall_exec(const char *cmd_line){
   }
   // Wait for child to load
   sema_down(&child->exec_sema);
+  if (!child->succ){
+    return -1;
+  }
   return tid;
 }
 

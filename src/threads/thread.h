@@ -118,6 +118,8 @@ struct thread
     struct list fds;                /* List of file descriptors. */
     int fd_count;                   /* File descriptor count. */
     struct file *executable;              /* File pointer for the executable. */
+    bool succ;                     /* Load success flag. */
+    bool waited;                   /* Waited flag. */
     /* Used by vm modules */
     struct hash spt;                  /* Supplemental page table. */
     void *esp_copy;                   /* Copy of the user stack pointer. */

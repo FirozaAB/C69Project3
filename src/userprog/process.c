@@ -37,7 +37,7 @@ static bool tokenise(const char *cmdline, char **argv, int *argc) {
   char *token, *context;
   int i = 0;
   
-  for (token = strtok_r((char *)cmdline, " ", &context); token != NULL; token = strtok_r(NULL, " ", &context)) 
+  for (token = strtok_r((char *)cmdline, " ", &context); token != NULL; token = strtok_r(NULL, " \t\n", &context)) 
   {
     if (i >= MAX_ARGS){
       return false;
@@ -108,6 +108,7 @@ process_execute (const char *file_name)
 static void
 start_process (void *file_name_)
 {
+  struct thread *cur = thread_current();
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
@@ -121,15 +122,26 @@ start_process (void *file_name_)
   // If load failed, quit.
   palloc_free_page (file_name);
   if (!success){
-    sema_up(&thread_current()->exec_sema); // Wake up parent
+    sema_up(&cur->exec_sema); // Wake up parent
     thread_exit ();
   }
-
-  sema_up(&thread_current()->exec_sema); // Wake up parent
+  cur->succ = true;
+  sema_up(&cur->exec_sema); // Wake up parent
 
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
+
+static bool check_child_present(struct thread *cur, struct list_elem *elem) {
+  struct list_elem *e;
+  for (e = list_begin(&cur->c_list); e != list_end(&cur->c_list); e = list_next(e)) {
+    if (e == elem) {
+      return true;
+    }
+  }
+  return false;
+}
+
 
 /* Waits for thread TID to die and returns its exit status.  If
    it was terminated by the kernel (i.e. killed due to an
@@ -143,24 +155,56 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid) {
   // Find child thread
+  
   struct thread *cur = thread_current();
+  //printf("PROCESS_WAIT DEBUG: Parent %d  waiting on Child: %d \n", cur->tid, child_tid);
   struct list_elem *e;
   struct thread *child = NULL;
+
+    /* 
+    {
+      char buf[512];
+      int len = 0;
+      for (e = list_begin(&cur->c_list); e != list_end(&cur->c_list); e = list_next(e)) {
+        struct thread *t = list_entry(e, struct thread, c_elem);
+        len += snprintf(buf + len, sizeof(buf) - len, "tid %d at %p; ", t->tid, t);
+      }
+      PANIC("DEBUG: Parent %s c_list contains: %s", cur->name, buf);
+    }*/
+  
+
   for (e = list_begin(&cur->c_list); e != list_end(&cur->c_list); e = list_next(e)) {
     struct thread *t = list_entry(e, struct thread, c_elem);
     if (t->tid == child_tid) {
       child = t;
+      //PANIC("PROCESS_WAIT DEBUG: Parent %d found Child: %d \n", cur->tid, child_tid);
       break;
     }
   }
   if (child == NULL) {
+    //PANIC("PROCESS_WAIT DEBUG: Parent %d has NULL Child \n", cur->tid);
     return -1;
   }
+
+  if (child->waited) {
+    //PANIC("PROCESS_WAIT DEBUG: Parent %d already waited on Child: %d \n", cur->tid, child_tid);
+    return -1;
+  }
+  child->waited = true;
+  
+  int status = -1;
   // Wait for child to exit
+  //PANIC("PROCESS_WAIT DEBUG: Parent %d waiting on sema_down(exit_sema) on Child: %d \n", cur->tid, child_tid);
   sema_down(&child->exit_sema);
-  // Remove child from parent's c_list and reap exit_status
-  list_remove(&child->c_elem);
-  int status = child->exit_status;
+  //PANIC("PROCESS_WAIT DEBUG: Parent %d fwoke after sema_down(exit_sema) on Child: %d \n", cur->tid, child_tid);
+    /* Remove child from parent's c_list only if it is still present. */
+    if (check_child_present(cur, &child->c_elem)) {
+      status = child->exit_status;
+      list_remove(&child->c_elem);
+      //PANIC("PROCESS_WAIT DEBUG: Parent %d removed Child: %d \n", cur->tid, child_tid);
+    } else {
+      //PANIC("PROCESS_WAIT DEBUG: Parent %d Child not present in c_list: %d \n", cur->tid, child_tid);
+    }
   return status;
 }
 

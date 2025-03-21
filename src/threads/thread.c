@@ -185,6 +185,26 @@ thread_create (const char *name, int priority,
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
 
+  /* Thread Hierarchy */
+  #ifdef USERPROG
+  t->p = thread_current();
+  list_push_back(&thread_current()->c_list, &t->c_elem);
+  t->exit_status = -1;
+  t->waited = false;
+  t->succ = false;
+  sema_init(&t->exit_sema, 0);
+  sema_init(&t->exec_sema, 0);
+  list_init(&t->fds);
+  t->executable = NULL;
+  t->fd_count = 2;
+  #endif
+  #ifdef VM
+  t->esp_copy = NULL;
+  spt_init(&t->spt);
+  list_init(&t->memmapped_files);
+  t->curr_map = 1;
+  #endif
+
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame (t, sizeof *kf);
   kf->eip = NULL;
@@ -200,11 +220,7 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
 
-  /* Thread Hierarchy */
-  #ifdef USERPROG
-  t->p = thread_current();
-  list_push_back(&thread_current()->c_list, &t->c_elem);
-  #endif
+
 
   /* Add to run queue. */
   thread_unblock (t);
@@ -473,6 +489,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
 
   #ifdef USERPROG
+  t->succ = false;
   t->exit_status = DEFAULT_EXIT_STATUS; // -1 
   t->p = NULL;
   sema_init(&t->exit_sema, 0);
@@ -480,11 +497,6 @@ init_thread (struct thread *t, const char *name, int priority)
   list_init(&t->c_list);
   list_init(&t->fds);
   t->fd_count = 2;
-  #endif
-  #ifdef VM
-  spt_init(&t->spt);
-  list_init(&t->memmapped_files);
-  t->curr_map = 1; // start at 1 to catch errors; map id is <1 if no valid mapping
   #endif
 
   old_level = intr_disable ();
@@ -560,8 +572,14 @@ thread_schedule_tail (struct thread *prev)
      palloc().) */
   if (prev != NULL && prev->status == THREAD_DYING && prev != initial_thread) 
     {
+      #ifdef USERPROG
+      if(prev->p == NULL){
+        palloc_free_page (prev);
+      } 
+      #else
       ASSERT (prev != cur);
       palloc_free_page (prev);
+      #endif
     }
 }
 

@@ -1,5 +1,4 @@
 #ifdef VM
-#warning "Compiling vm module: swap.c"
 #include "vm/swap.h"
 #include "threads/vaddr.h"
 #include "devices/block.h"
@@ -7,6 +6,8 @@
 #include "threads/synch.h"
 #include <stdio.h>
 #include <string.h>
+#include <bitmap.h>
+
 
 /* 4 KB page, 512 bytes block sectors.
  */
